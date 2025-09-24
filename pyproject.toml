@@ -1,0 +1,13 @@
+[project]
+name = "asset-terminal"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiosqlite>=0.21.0",
+    "httpx>=0.28.1",
+    "textual>=6.1.0",
+    "textual-plotext>=1.0.1",
+    "yfinance>=0.2.66",
+]

@@ -1,0 +1,17 @@
+#buttons {
+    height: 1;
+    width: auto;
+}
+
+ContentSwitcher {
+    border: round $primary;
+    width: 100%;
+    height: 1fr;
+}
+
+PlotextPlot {
+    height: 1fr;
+}
+AssetsTable {
+    height: 1fr;
+}
