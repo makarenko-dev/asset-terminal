@@ -55,11 +55,10 @@ class AssetsTable(Widget):
         # self.set_interval(10, self.test_chart)
         self.provider.run()
 
-    def on_data_table_row_highlighted(self, message):
+    def on_data_table_row_highlighted(self, _):
         self.query_one(PlotextPlot).display = False
 
     async def action_show_chart(self):
-        logging.info("get value")
         table = self.query_one(DataTable)
         coordinate = table.cursor_coordinate
         table.coordinate_to_cell_key
@@ -68,13 +67,11 @@ class AssetsTable(Widget):
         asset_name = row_values[1].lower()
         asset_type = AssetType(row_values[0])
         data = await self.provider.chart_data_for(asset_name, asset_type)
-        logging.info(f"Got data {data}")
         plt = self.query_one(PlotextPlot).plt
         plt.clear_figure()
         if data:
             y = [d[1] for d in data]
             x = [datetime.fromtimestamp(d[0] / 1000).strftime("%d/%m/%Y") for d in data]
-            logging.info("Finished to wait")
             plt.plot(x, y)
         else:
             plt.plot([], [])

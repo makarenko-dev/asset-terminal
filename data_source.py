@@ -4,6 +4,7 @@ import yfinance as yf
 import logging
 import httpx
 import time
+import json
 
 from data_types import AssetStat, TotalStat, AssetType
 from wallet import Wallet
@@ -40,17 +41,26 @@ class CachedDataProvider:
 
     async def init_provider(self):
         await db.init_db()
+        self.symbol_to_name = self._load_symbol_map()
+
+    def _load_symbol_map(self):
+        with open("crypto_mapping.json", "r", encoding="utf-8") as f:
+            m = json.load(f)
+        return {k.lower(): v for k, v in m.items()}
 
     def run(self):
         asyncio.create_task(self._job())
 
     async def _job(self):
+        for crypto in self.wallet.crypto.keys():
+            await self.chart_data_for(crypto.lower(), AssetType.CRYPTO)
+        for stock in self.wallet.stocks.keys():
+            await self.chart_data_for(stock.lower(), AssetType.STOCK)
         while True:
             try:
                 data = await self._queue.get()
-                asset = data[0]
-                logging.info(f"Preparing to fetch chart data for {asset}")
-                if asset[1] == AssetType.CRYPTO:
+                asset, asset_type = data
+                if asset_type == AssetType.CRYPTO:
                     rows = await self.fetch_crypto_chart_data(asset)
                 else:
                     rows = await self.fetch_stock_chart_data(asset)
@@ -148,8 +158,6 @@ class CachedDataProvider:
             for coin in r_json:
                 if coin["symbol"] in assets_keys:
                     result[coin["symbol"].upper()] = coin
-                if coin["symbol"] not in self.symbol_to_name:
-                    self.symbol_to_name[coin["symbol"]] = coin["name"].lower()
         return result
 
     async def get_stocks_info(self, assets: List[str]) -> Dict[str, Dict[str, Any]]:
