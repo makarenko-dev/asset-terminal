@@ -12,7 +12,7 @@ from datetime import datetime
 from ui.pl_header import PLHeader
 from ui import helper
 
-from data_types import AssetStat, TotalStat
+from data_types import AssetStat, TotalStat, AssetType
 from data_source import CachedDataProvider
 
 
@@ -62,14 +62,23 @@ class AssetsTable(Widget):
         logging.info("get value")
         table = self.query_one(DataTable)
         coordinate = table.cursor_coordinate
-        asset_name = table.coordinate_to_cell_key(coordinate).row_key.value
-        data = await self.provider.chart_data_for(asset_name)
+        table.coordinate_to_cell_key
+        row_key = table.coordinate_to_cell_key(coordinate).row_key
+        row_values = table.get_row(row_key)
+        asset_name = row_values[1].lower()
+        asset_type = AssetType(row_values[0])
+        data = await self.provider.chart_data_for(asset_name, asset_type)
         logging.info(f"Got data {data}")
-        y = [d[1] for d in data]
-        x = [datetime.fromtimestamp(d[0] / 1000).strftime("%d/%m/%Y") for d in data]
-        logging.info("Finished to wait")
         plt = self.query_one(PlotextPlot).plt
-        plt.plot(x, y)
+        plt.clear_figure()
+        if data:
+            y = [d[1] for d in data]
+            x = [datetime.fromtimestamp(d[0] / 1000).strftime("%d/%m/%Y") for d in data]
+            logging.info("Finished to wait")
+            plt.plot(x, y)
+        else:
+            plt.plot([], [])
+
         plt.title(f"Chart for {asset_name.upper()}")
         self.query_one(PlotextPlot).display = True
 

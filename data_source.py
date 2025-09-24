@@ -1,11 +1,11 @@
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 import asyncio
 import yfinance as yf
 import logging
 import httpx
 import time
 
-from data_types import AssetStat, TotalStat
+from data_types import AssetStat, TotalStat, AssetType
 from wallet import Wallet
 import db
 
@@ -15,26 +15,28 @@ MAX_DIFF = 1000 * 60 * 60 * 24
 class CachedDataProvider:
     def __init__(self, wallet: Wallet):
         self.wallet = wallet
-        self.symbol_to_name: Dict[str, str] = {"btc": "bitcoin", "eth": "ethereum"}
-        self._queue: asyncio.Queue[str] = asyncio.Queue()
-        self._enqueued: set[str] = set()
+        self.symbol_to_name: Dict[str, str] = {}
+        self._queue: asyncio.Queue[Tuple[str, AssetType]] = asyncio.Queue()
+        self._enqueued: Set[Tuple[str, AssetType]] = set()
 
-    async def chart_data_for(self, asset: str) -> Optional[List[Tuple[int, float]]]:
-        name = self.symbol_to_name[asset]
+    async def chart_data_for(
+        self, asset: str, asset_type: AssetType
+    ) -> Optional[List[Tuple[int, float]]]:
         result = await db.get_last_updated_price(asset)
         current_time = time.time() * 1000
         if not result or (current_time - result) > MAX_DIFF:
             logging.info(f"No data for {asset} chart. Adding to queue")
-            self._add_to_fetch_queue(asset)
+            self._add_to_fetch_queue(asset, asset_type)
             return None
         chart = await db.prices_chart_for(asset)
         logging.info(f"Returning data for {asset} chart")
         return chart
 
-    def _add_to_fetch_queue(self, asset: str):
-        if asset not in self._enqueued:
-            self._enqueued.add(asset)
-            self._queue.put_nowait(asset)
+    def _add_to_fetch_queue(self, asset: str, asset_type: AssetType):
+        data = (asset, asset_type)
+        if data not in self._enqueued:
+            self._enqueued.add(data)
+            self._queue.put_nowait(data)
 
     async def init_provider(self):
         await db.init_db()
@@ -45,26 +47,49 @@ class CachedDataProvider:
     async def _job(self):
         while True:
             try:
-                asset = await self._queue.get()
+                data = await self._queue.get()
+                asset = data[0]
                 logging.info(f"Preparing to fetch chart data for {asset}")
-                rows = await self.fetch_chart_data(asset)
+                if asset[1] == AssetType.CRYPTO:
+                    rows = await self.fetch_crypto_chart_data(asset)
+                else:
+                    rows = await self.fetch_stock_chart_data(asset)
                 if rows:
                     await db.update_prices_data(asset, rows)
-                self._enqueued.remove(asset)
+                self._enqueued.remove(data)
                 self._queue.task_done()
             except Exception as e:
                 logging.error(f"Error {e}")
-            await asyncio.sleep(100)
+            await asyncio.sleep(60)
 
-    async def fetch_chart_data(self, asset_symbol: str) -> List[Tuple[int, float]]:
+    async def fetch_crypto_chart_data(
+        self, asset_symbol: str
+    ) -> List[Tuple[int, float]]:
         name = self.symbol_to_name[asset_symbol]
         logging.info(f"Called fetch_chart_data for {asset_symbol}, name {name}")
-        url = f"https://api.coingecko.com//api/v3/coins/{name}/market_chart?vs_currency=usd&days=30&interval=daily"
+        url = f"https://api.coingecko.com/api/v3/coins/{name}/market_chart?vs_currency=usd&days=30&interval=daily"
         async with httpx.AsyncClient() as client:
             r = await client.get(url)
             data = r.json()
         prices = [(int(ts), float(price)) for ts, price in data.get("prices")]
         return prices
+
+    async def fetch_stock_chart_data(
+        self, asset_symbol: str
+    ) -> List[Tuple[int, float]]:
+        loop = asyncio.get_running_loop()
+
+        def _get() -> List[Tuple[int, float]]:
+            df = yf.Ticker(asset_symbol).history(period="1mo", interval="1d")
+            if df.empty:
+                return []
+            rows = []
+            for ts, close in df["Close"].items():
+                rows.append((int(ts.value // 1_000_000), float(close)))
+            return rows
+
+        data = await loop.run_in_executor(None, _get)
+        return data
 
     async def total_stat(self) -> TotalStat:
         crypto = self.wallet.crypto.keys()
@@ -124,7 +149,7 @@ class CachedDataProvider:
                 if coin["symbol"] in assets_keys:
                     result[coin["symbol"].upper()] = coin
                 if coin["symbol"] not in self.symbol_to_name:
-                    self.symbol_to_name[coin["symbol"]] = coin["name"]
+                    self.symbol_to_name[coin["symbol"]] = coin["name"].lower()
         return result
 
     async def get_stocks_info(self, assets: List[str]) -> Dict[str, Dict[str, Any]]:
