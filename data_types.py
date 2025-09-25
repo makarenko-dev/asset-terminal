@@ -8,6 +8,12 @@ class AssetType(Enum):
     STOCK = "stock"
 
 
+class ChartPeriod(Enum):
+    MONTH = "month"
+    HALF_YEAR = "half_year"
+    YEAR = "year"
+
+
 @dataclass
 class Asset:
     asset_type: AssetType

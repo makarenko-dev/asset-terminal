@@ -5,8 +5,9 @@ import logging
 import httpx
 import time
 import json
+from enum import Enum
 
-from data_types import AssetStat, TotalStat, AssetType
+from data_types import AssetStat, TotalStat, AssetType, ChartPeriod
 from wallet import Wallet
 import db
 
@@ -14,6 +15,7 @@ MAX_DIFF = 1000 * 60 * 60 * 24
 
 
 class CachedDataProvider:
+
     def __init__(self, wallet: Wallet):
         self.wallet = wallet
         self.symbol_to_name: Dict[str, str] = {}
@@ -21,7 +23,7 @@ class CachedDataProvider:
         self._enqueued: Set[Tuple[str, AssetType]] = set()
 
     async def chart_data_for(
-        self, asset: str, asset_type: AssetType
+        self, asset: str, asset_type: AssetType, period: ChartPeriod = ChartPeriod.MONTH
     ) -> Optional[List[Tuple[int, float]]]:
         result = await db.get_last_updated_price(asset)
         current_time = time.time() * 1000
@@ -29,8 +31,8 @@ class CachedDataProvider:
             logging.info(f"No data for {asset} chart. Adding to queue")
             self._add_to_fetch_queue(asset, asset_type)
             return None
-        chart = await db.prices_chart_for(asset)
-        logging.info(f"Returning data for {asset} chart")
+        chart = await db.prices_chart_for(asset, period)
+        logging.info(f"Returning data for {asset} chart, period {period}")
         return chart
 
     def _add_to_fetch_queue(self, asset: str, asset_type: AssetType):
@@ -77,7 +79,7 @@ class CachedDataProvider:
     ) -> List[Tuple[int, float]]:
         name = self.symbol_to_name[asset_symbol]
         logging.info(f"Called fetch_chart_data for {asset_symbol}, name {name}")
-        url = f"https://api.coingecko.com/api/v3/coins/{name}/market_chart?vs_currency=usd&days=30&interval=daily"
+        url = f"https://api.coingecko.com/api/v3/coins/{name}/market_chart?vs_currency=usd&days=365&interval=daily"
         async with httpx.AsyncClient() as client:
             r = await client.get(url)
             data = r.json()
@@ -90,7 +92,7 @@ class CachedDataProvider:
         loop = asyncio.get_running_loop()
 
         def _get() -> List[Tuple[int, float]]:
-            df = yf.Ticker(asset_symbol).history(period="1mo", interval="1d")
+            df = yf.Ticker(asset_symbol).history(period="1y", interval="1d")
             if df.empty:
                 return []
             rows = []

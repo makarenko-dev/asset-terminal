@@ -5,14 +5,14 @@ from textual.binding import Binding
 from textual_plotext import PlotextPlot
 from rich.text import Text
 
-from typing import Tuple, Any, Dict, Callable, Optional
+from typing import Tuple, Any, Dict, Callable, Optional, List
 import logging
 from datetime import datetime
 
 from ui.pl_header import PLHeader
 from ui import helper
 
-from data_types import AssetStat, TotalStat, AssetType
+from data_types import AssetStat, TotalStat, AssetType, ChartPeriod
 from data_source import CachedDataProvider
 
 
@@ -22,6 +22,9 @@ class AssetsTable(Widget):
         Binding("n", "sort_by_name", "sort by name", show=False),
         Binding("p", "sort_by_pl_total", "sort by p&l total", show=False),
         Binding("c", "show_chart", "show chart"),
+        Binding("1", "chart_range_1m", "1M"),
+        Binding("2", "chart_range_6m", "6M"),
+        Binding("3", "chart_range_1y", "1Y"),
     ]
     stat: reactive[TotalStat] = reactive(None)
     current_sort: Dict[str, bool] = {}
@@ -42,6 +45,32 @@ class AssetsTable(Widget):
     def _float_from_text(self, value):
         return float(value.plain)
 
+    def asset_under_cursor(self) -> Tuple[str, AssetType]:
+        table = self.query_one(DataTable)
+        coordinate = table.cursor_coordinate
+        row_key = table.coordinate_to_cell_key(coordinate).row_key
+        row_values = table.get_row(row_key)
+        asset_name = row_values[1].lower()
+        asset_type = AssetType(row_values[0])
+        return asset_name, asset_type
+
+    def draw_chart(self, data: List[Tuple[int, float]], title: str):
+        plot_text = self.query_one(PlotextPlot)
+        plt = plot_text.plt
+        plt.clear_figure()
+        if data:
+            y = [d[1] for d in data]
+            x = [datetime.fromtimestamp(d[0] / 1000).strftime("%d/%m/%Y") for d in data]
+            plt.plot(x, y)
+        else:
+            plt.plot([], [])
+        plt.title(title)
+        display = plot_text.display
+        if display:
+            plot_text.refresh()
+        else:
+            plot_text.display = True
+
     async def on_mount(self):
         self.query_one(PlotextPlot).display = False
         table = self.query_one(DataTable)
@@ -52,36 +81,40 @@ class AssetsTable(Widget):
         await self.provider.init_provider()
         self.call_later(self.refresh_data)
         self.set_interval(helper.UPDATE_INTERVAL, self.refresh_data)
-        # self.set_interval(10, self.test_chart)
         self.provider.run()
 
     def on_data_table_row_highlighted(self, _):
-        self.query_one(PlotextPlot).display = False
+        pass
+        # self.query_one(PlotextPlot).display = False
+
+    async def action_chart_range_1m(self):
+        asset_name, asset_type = self.asset_under_cursor()
+        data = await self.provider.chart_data_for(
+            asset_name, asset_type, ChartPeriod.MONTH
+        )
+        self.draw_chart(data, f"{asset_name} price for 1M")
+
+    async def action_chart_range_6m(self):
+        asset_name, asset_type = self.asset_under_cursor()
+        data = await self.provider.chart_data_for(
+            asset_name, asset_type, ChartPeriod.HALF_YEAR
+        )
+        self.draw_chart(data, f"{asset_name} price for 6M")
+
+    async def action_chart_range_1y(self):
+        asset_name, asset_type = self.asset_under_cursor()
+        data = await self.provider.chart_data_for(
+            asset_name, asset_type, ChartPeriod.YEAR
+        )
+        self.draw_chart(data, f"{asset_name} price for 1Y")
 
     async def action_show_chart(self):
-        table = self.query_one(DataTable)
-        coordinate = table.cursor_coordinate
-        table.coordinate_to_cell_key
-        row_key = table.coordinate_to_cell_key(coordinate).row_key
-        row_values = table.get_row(row_key)
-        asset_name = row_values[1].lower()
-        asset_type = AssetType(row_values[0])
-        data = await self.provider.chart_data_for(asset_name, asset_type)
-        plt = self.query_one(PlotextPlot).plt
-        plt.clear_figure()
-        if data:
-            y = [d[1] for d in data]
-            x = [datetime.fromtimestamp(d[0] / 1000).strftime("%d/%m/%Y") for d in data]
-            plt.plot(x, y)
-        else:
-            plt.plot([], [])
-
-        plt.title(f"Chart for {asset_name.upper()}")
-        self.query_one(PlotextPlot).display = True
-
-    async def test_chart(self):
-        data = await self.provider.chart_data_for("btc")
-        logging.info(f"Received btc data {data}")
+        plot_text = self.query_one(PlotextPlot)
+        display = plot_text.display
+        if display:
+            plot_text.display = False
+            return
+        await self.action_chart_range_1m()
 
     async def refresh_data(self):
         new_stat = await self.provider.total_stat()

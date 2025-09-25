@@ -2,6 +2,8 @@ import aiosqlite
 from typing import List, Tuple
 import time
 import logging
+from datetime import datetime, timezone, timedelta
+from data_types import ChartPeriod
 
 DB_PATH = "cache.db"
 
@@ -41,11 +43,24 @@ async def get_last_updated_price(asset: str):
         return None
 
 
-async def prices_chart_for(asset: str) -> List[Tuple[int, float]]:
+def _since_ms_for(period: ChartPeriod) -> int:
+    now = datetime.now(timezone.utc)
+    if period == ChartPeriod.MONTH:
+        delta = timedelta(days=30)
+    if period == ChartPeriod.HALF_YEAR:
+        delta = timedelta(days=182)
+    if period == ChartPeriod.YEAR:
+        delta = timedelta(days=365)
+    return int((now - delta).timestamp() * 1000)
+
+
+async def prices_chart_for(asset: str, period: ChartPeriod) -> List[Tuple[int, float]]:
     async with aiosqlite.connect(DB_PATH) as db:
         asset_id = await _asset_id(db, asset)
+        since_ms = _since_ms_for(period)
         curr = await db.execute(
-            "SELECT ts_ms, price FROM prices WHERE asset_id = ?", (asset_id,)
+            "SELECT ts_ms, price FROM prices WHERE asset_id = ? AND ts_ms >= ?",
+            (asset_id, since_ms),
         )
         rows = await curr.fetchall()
         return [(int(ts), float(p)) for ts, p in rows]
