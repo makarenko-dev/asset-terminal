@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Dict, Any
-from data_types import Asset
+from data_types import Asset, AssetType
 from pathlib import Path
 import json
 
@@ -9,6 +9,17 @@ import json
 class Wallet:
     crypto: Dict[str, Asset]
     stocks: Dict[str, Asset]
+
+    @staticmethod
+    def from_asset_list(lst: List[Asset]) -> "Wallet":
+        stocks = {}
+        crypto = {}
+        for asset in lst:
+            if asset.asset_type == AssetType.CRYPTO:
+                crypto[asset.name] = asset
+            else:
+                stocks[asset.name] = asset
+        return Wallet(crypto=crypto, stocks=stocks)
 
     def to_json(self):
         return {

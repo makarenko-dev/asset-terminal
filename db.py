@@ -3,7 +3,7 @@ from typing import List, Tuple
 import time
 import logging
 from datetime import datetime, timezone, timedelta
-from data_types import ChartPeriod
+from data_types import ChartPeriod, Asset, AssetType
 
 DB_PATH = "cache.db"
 
@@ -26,6 +26,16 @@ async def init_db():
             ts_ms     INTEGER NOT NULL,
             price     REAL NOT NULL,
             FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+        )"""
+        )
+        await db.execute(
+            """
+        CREATE TABLE IF NOT EXISTS wallet (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            amount     REAL NOT NULL,
+            price     REAL NOT NULL,
+            asset_type TEXT NOT NULL
         )"""
         )
         await db.commit()
@@ -71,13 +81,43 @@ async def _asset_id(db: aiosqlite.Connection, asset: str):
     curr = await db.execute("SELECT id FROM assets WHERE symbol = ?", (asset,))
     row = await curr.fetchone()
     if row:
-        logging.info(f"Found asset returning id {row[0]}")
         return row[0]
     result = await db.execute(
         "INSERT INTO assets (symbol, last_called_ms) VALUES (?, ?)", (asset, curr_time)
     )
     await db.commit()
     return result.lastrowid
+
+
+async def add_asset_to_wallet(asset: Asset):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO wallet (name, amount, price, asset_type) VALUES (?, ?, ?, ?)",
+            (asset.name, asset.amount, asset.avg_price, asset.asset_type.value),
+        )
+        await db.commit()
+
+
+async def update_asset_in_wallet(asset: Asset):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE wallet SET amount=?, price=? WHERE name=?",
+            (asset.amount, asset.avg_price, asset.name),
+        )
+        await db.commit()
+
+
+async def wallet_assets() -> List[Asset]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        curr = await db.execute(
+            "SELECT name, amount, price, asset_type FROM wallet",
+        )
+        rows = await curr.fetchall()
+        result = [
+            Asset(AssetType(asset_type), name, amount, price)
+            for name, amount, price, asset_type in rows
+        ]
+        return result
 
 
 async def update_prices_data(asset: str, prices: List[Tuple[int, float]]):

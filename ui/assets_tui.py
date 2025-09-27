@@ -8,7 +8,7 @@ from typing import List, Tuple, Any
 from datetime import datetime
 
 from ui.assets_table import AssetsTable
-import ui.helper as helper
+from ui.assets_widget import AssetsWidget
 from data_source import CachedDataProvider
 
 
@@ -25,6 +25,7 @@ class AssetsTui(App):
     def compose(self):
         # yield PlotextPlot()
         yield AssetsTable(self.provider, id="assets-table")
+        # yield AssetsWidget(self.provider)
         yield Footer()
 
     def on_mount(self):

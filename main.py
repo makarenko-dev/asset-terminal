@@ -1,4 +1,4 @@
-from data_source import CachedDataProvider
+from services.provider import DataProvider
 from wallet import Wallet
 from pathlib import Path
 from ui.assets_tui import AssetsTui
@@ -15,8 +15,6 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    p = Path("wallet.json")
-    wallet = Wallet.load(p)
-    provider = CachedDataProvider(wallet)
+    provider = DataProvider()
     app = AssetsTui(provider)
     app.run()

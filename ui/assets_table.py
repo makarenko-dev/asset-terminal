@@ -10,10 +10,12 @@ import logging
 from datetime import datetime
 
 from ui.pl_header import PLHeader
+from ui.edit_screen import EditAmountScreen
 from ui import helper
 
-from data_types import AssetStat, TotalStat, AssetType, ChartPeriod
-from data_source import CachedDataProvider
+
+from services.provider import DataProvider
+from data_types import AssetStat, TotalStat, AssetType, ChartPeriod, Asset
 
 
 class AssetsTable(Widget):
@@ -22,6 +24,8 @@ class AssetsTable(Widget):
         Binding("n", "sort_by_name", "sort by name", show=False),
         Binding("p", "sort_by_pl_total", "sort by p&l total", show=False),
         Binding("c", "show_chart", "show chart"),
+        Binding("a", "add_asset", "add asset"),
+        Binding("e", "edit_asset", "edit asset"),
         Binding("1", "chart_range_1m", "1M"),
         Binding("2", "chart_range_6m", "6M"),
         Binding("3", "chart_range_1y", "1Y"),
@@ -30,9 +34,27 @@ class AssetsTable(Widget):
     current_sort: Dict[str, bool] = {}
     current_sort_key: Optional[Callable] = None
 
-    def __init__(self, provider: CachedDataProvider, *args, **kwargs):
+    def __init__(self, provider: DataProvider, *args, **kwargs):
         self.provider = provider
         super().__init__(*args, **kwargs)
+
+    async def action_add_asset(self):
+        self.run_worker(self._add_asset_flow(), exclusive=True)
+
+    async def action_edit_asset(self):
+        self.run_worker(self._edit_asset_flow(), exclusive=True)
+
+    async def _edit_asset_flow(self):
+        asset_name, _, amount = self.asset_under_cursor()
+        result = await self.app.push_screen_wait(EditAmountScreen(asset_name, amount))
+
+    async def _add_asset_flow(self):
+        result = await self.app.push_screen_wait(EditAmountScreen("", 0.0, 0.0))
+        if result:
+            asset_type, name, amount, price = result
+            a = Asset(asset_type, name.upper(), amount, price)
+            await self.provider.add_asset(a)
+            self.stat = await self.provider.total_stat()
 
     def compose(self):
         yield PlotextPlot()
@@ -45,14 +67,15 @@ class AssetsTable(Widget):
     def _float_from_text(self, value):
         return float(value.plain)
 
-    def asset_under_cursor(self) -> Tuple[str, AssetType]:
+    def asset_under_cursor(self) -> Tuple[str, AssetType, float]:
         table = self.query_one(DataTable)
         coordinate = table.cursor_coordinate
         row_key = table.coordinate_to_cell_key(coordinate).row_key
         row_values = table.get_row(row_key)
         asset_name = row_values[1].lower()
         asset_type = AssetType(row_values[0])
-        return asset_name, asset_type
+        amount = row_values[2]
+        return asset_name, asset_type, amount
 
     def draw_chart(self, data: List[Tuple[int, float]], title: str):
         plot_text = self.query_one(PlotextPlot)
@@ -78,31 +101,30 @@ class AssetsTable(Widget):
         table.cursor_type = "row"
         for header, key in helper.COLUMNS:
             table.add_column(header, key=key)
-        await self.provider.init_provider()
+        await self.provider.init()
         self.call_later(self.refresh_data)
         self.set_interval(helper.UPDATE_INTERVAL, self.refresh_data)
-        self.provider.run()
 
     def on_data_table_row_highlighted(self, _):
         pass
         # self.query_one(PlotextPlot).display = False
 
     async def action_chart_range_1m(self):
-        asset_name, asset_type = self.asset_under_cursor()
+        asset_name, asset_type, _ = self.asset_under_cursor()
         data = await self.provider.chart_data_for(
             asset_name, asset_type, ChartPeriod.MONTH
         )
         self.draw_chart(data, f"{asset_name} price for 1M")
 
     async def action_chart_range_6m(self):
-        asset_name, asset_type = self.asset_under_cursor()
+        asset_name, asset_type, _ = self.asset_under_cursor()
         data = await self.provider.chart_data_for(
             asset_name, asset_type, ChartPeriod.HALF_YEAR
         )
         self.draw_chart(data, f"{asset_name} price for 6M")
 
     async def action_chart_range_1y(self):
-        asset_name, asset_type = self.asset_under_cursor()
+        asset_name, asset_type, _ = self.asset_under_cursor()
         data = await self.provider.chart_data_for(
             asset_name, asset_type, ChartPeriod.YEAR
         )
