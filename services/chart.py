@@ -20,13 +20,14 @@ class ChartService:
     async def chart_data_for(
         self, asset: str, asset_type: AssetType, period: ChartPeriod = ChartPeriod.MONTH
     ) -> Optional[List[Tuple[int, float]]]:
-        result = await db.get_last_updated_price(asset)
+        normalized_name = asset.lower()
+        result = await db.get_last_updated_price(normalized_name)
         current_time = time.time() * 1000
         if not result or (current_time - result) > MAX_DIFF:
             logging.info(f"No data for {asset} chart. Adding to queue")
-            self._add_to_fetch_queue(asset, asset_type)
+            self._add_to_fetch_queue(normalized_name, asset_type)
             return None
-        chart = await db.prices_chart_for(asset, period)
+        chart = await db.prices_chart_for(normalized_name, period)
         return chart
 
     def _add_to_fetch_queue(self, asset: str, asset_type: AssetType):

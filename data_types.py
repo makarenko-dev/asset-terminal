@@ -26,6 +26,10 @@ class Asset:
         d["asset_type"] = self.asset_type.value
         return d
 
+    @classmethod
+    def empty(cls) -> "Asset":
+        return cls(AssetType.CRYPTO, "", 0.0, 0.0)
+
     @staticmethod
     def from_json(d: dict) -> "Asset":
         return Asset(

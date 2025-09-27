@@ -9,7 +9,7 @@ from datetime import datetime
 
 from ui.assets_table import AssetsTable
 from ui.assets_widget import AssetsWidget
-from data_source import CachedDataProvider
+from services.provider import DataProvider
 
 
 class AssetsTui(App):
@@ -18,7 +18,7 @@ class AssetsTui(App):
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, provider: CachedDataProvider, *args, **kwargs):
+    def __init__(self, provider: DataProvider, *args, **kwargs):
         self.provider = provider
         super().__init__(*args, **kwargs)
 

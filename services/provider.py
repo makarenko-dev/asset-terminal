@@ -44,3 +44,6 @@ class DataProvider:
 
     async def update_asset(self, asset: Asset):
         return await self.portfolio.update_asset(asset)
+
+    async def delete_asset(self, asset: Asset):
+        return await self.portfolio.delete_asset(asset)

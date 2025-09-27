@@ -11,6 +11,7 @@ from datetime import datetime
 
 from ui.pl_header import PLHeader
 from ui.edit_screen import EditAmountScreen
+from ui.delete import ConfirmDeleteScreen
 from ui import helper
 
 
@@ -23,9 +24,10 @@ class AssetsTable(Widget):
         Binding("t", "sort_by_type", "sort by type", show=False),
         Binding("n", "sort_by_name", "sort by name", show=False),
         Binding("p", "sort_by_pl_total", "sort by p&l total", show=False),
-        Binding("c", "show_chart", "show chart"),
+        Binding("c", "show_chart", "show/hide chart"),
         Binding("a", "add_asset", "add asset"),
         Binding("e", "edit_asset", "edit asset"),
+        Binding("d", "delete_asset", "delete asset"),
         Binding("1", "chart_range_1m", "1M"),
         Binding("2", "chart_range_6m", "6M"),
         Binding("3", "chart_range_1y", "1Y"),
@@ -44,16 +46,29 @@ class AssetsTable(Widget):
     async def action_edit_asset(self):
         self.run_worker(self._edit_asset_flow(), exclusive=True)
 
+    async def action_delete_asset(self):
+        self.run_worker(self._delete_asset_flow(), exclusive=True)
+
+    async def _delete_asset_flow(self):
+        asset = self.asset_under_cursor()
+        result = await self.app.push_screen_wait(ConfirmDeleteScreen(asset.name))
+        if result:
+            await self.provider.delete_asset(asset)
+            self.stat = await self.provider.total_stat()
+
     async def _edit_asset_flow(self):
-        asset_name, _, amount = self.asset_under_cursor()
-        result = await self.app.push_screen_wait(EditAmountScreen(asset_name, amount))
+        asset = self.asset_under_cursor()
+        result = await self.app.push_screen_wait(EditAmountScreen(asset))
+        if result:
+            logging.info(f"Returned result {result}")
+            await self.provider.update_asset(result)
+            self.stat = await self.provider.total_stat()
 
     async def _add_asset_flow(self):
-        result = await self.app.push_screen_wait(EditAmountScreen("", 0.0, 0.0))
+        empty = Asset.empty()
+        result = await self.app.push_screen_wait(EditAmountScreen(empty))
         if result:
-            asset_type, name, amount, price = result
-            a = Asset(asset_type, name.upper(), amount, price)
-            await self.provider.add_asset(a)
+            await self.provider.add_asset(result)
             self.stat = await self.provider.total_stat()
 
     def compose(self):
@@ -67,15 +82,15 @@ class AssetsTable(Widget):
     def _float_from_text(self, value):
         return float(value.plain)
 
-    def asset_under_cursor(self) -> Tuple[str, AssetType, float]:
+    def asset_under_cursor(self) -> Asset:
         table = self.query_one(DataTable)
         coordinate = table.cursor_coordinate
         row_key = table.coordinate_to_cell_key(coordinate).row_key
         row_values = table.get_row(row_key)
-        asset_name = row_values[1].lower()
-        asset_type = AssetType(row_values[0])
-        amount = row_values[2]
-        return asset_name, asset_type, amount
+        result = Asset(
+            AssetType(row_values[0]), row_values[1], row_values[2], row_values[3]
+        )
+        return result
 
     def draw_chart(self, data: List[Tuple[int, float]], title: str):
         plot_text = self.query_one(PlotextPlot)
@@ -110,25 +125,25 @@ class AssetsTable(Widget):
         # self.query_one(PlotextPlot).display = False
 
     async def action_chart_range_1m(self):
-        asset_name, asset_type, _ = self.asset_under_cursor()
+        asset = self.asset_under_cursor()
         data = await self.provider.chart_data_for(
-            asset_name, asset_type, ChartPeriod.MONTH
+            asset.name, asset.asset_type, ChartPeriod.MONTH
         )
-        self.draw_chart(data, f"{asset_name} price for 1M")
+        self.draw_chart(data, f"{asset.name} price for 1M")
 
     async def action_chart_range_6m(self):
-        asset_name, asset_type, _ = self.asset_under_cursor()
+        asset = self.asset_under_cursor()
         data = await self.provider.chart_data_for(
-            asset_name, asset_type, ChartPeriod.HALF_YEAR
+            asset.name, asset.asset_type, ChartPeriod.HALF_YEAR
         )
-        self.draw_chart(data, f"{asset_name} price for 6M")
+        self.draw_chart(data, f"{asset.name} price for 6M")
 
     async def action_chart_range_1y(self):
-        asset_name, asset_type, _ = self.asset_under_cursor()
+        asset = self.asset_under_cursor()
         data = await self.provider.chart_data_for(
-            asset_name, asset_type, ChartPeriod.YEAR
+            asset.name, asset.asset_type, ChartPeriod.YEAR
         )
-        self.draw_chart(data, f"{asset_name} price for 1Y")
+        self.draw_chart(data, f"{asset.name} price for 1Y")
 
     async def action_show_chart(self):
         plot_text = self.query_one(PlotextPlot)

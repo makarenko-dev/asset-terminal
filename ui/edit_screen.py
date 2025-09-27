@@ -3,7 +3,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, Label, Footer, Select
 from textual.containers import Vertical
 
-from data_types import AssetType
+from data_types import AssetType, Asset
 
 from typing import Tuple
 
@@ -14,16 +14,9 @@ class EditAmountScreen(ModalScreen):
         ("ctrl+s", "save", "Save"),
     ]
 
-    def __init__(
-        self,
-        asset: str,
-        initial_amount: float,
-        price: float,
-    ):
+    def __init__(self, asset: Asset):
         super().__init__()
         self.asset = asset
-        self.initial_amount = initial_amount
-        self.price = price
 
     def compose(self):
         with Vertical(id="edit-modal"):
@@ -34,19 +27,19 @@ class EditAmountScreen(ModalScreen):
                     ("Crypto", AssetType.CRYPTO.value),
                     ("Stock", AssetType.STOCK.value),
                 ],
-                value=AssetType.CRYPTO.value,
+                value=self.asset.asset_type.value,
                 allow_blank=False,
             )
             yield Label(f"Ticker")
             yield Input(
-                value=str(self.asset), placeholder="Asset ticker", id="asset_name"
+                value=self.asset.name, placeholder="Asset ticker", id="asset_name"
             )
             yield Label(f"Amount")
-            yield Input(
-                value=str(self.initial_amount), placeholder="Amount", id="amount"
-            )
+            yield Input(value=str(self.asset.amount), placeholder="Amount", id="amount")
             yield Label(f"Price")
-            yield Input(value=str(self.price), placeholder="Price", id="price")
+            yield Input(
+                value=str(self.asset.avg_price), placeholder="Price", id="price"
+            )
         yield Footer()
 
     def on_mount(self):
@@ -100,4 +93,5 @@ class EditAmountScreen(ModalScreen):
             return
         asset_type_input = self.query_one("#asset-type", Select)
         asset_type = AssetType(asset_type_input.value)
-        self.dismiss((asset_type, name, amount, price))
+        result = Asset(asset_type, name, amount, price)
+        self.dismiss(result)

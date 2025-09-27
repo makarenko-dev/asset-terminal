@@ -107,6 +107,15 @@ async def update_asset_in_wallet(asset: Asset):
         await db.commit()
 
 
+async def delete_asset_from_wallet(asset: Asset):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM wallet WHERE name=?",
+            (asset.name,),
+        )
+        await db.commit()
+
+
 async def wallet_assets() -> List[Asset]:
     async with aiosqlite.connect(DB_PATH) as db:
         curr = await db.execute(

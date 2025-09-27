@@ -83,11 +83,42 @@ class PortfolioService:
         return await loop.run_in_executor(None, lambda: (stock, yf.Ticker(stock).info))
 
     async def add_asset(self, asset: Asset):
-        await db.add_asset_to_wallet(asset)
+        existing = self._has_asset_in_wallet(asset)
+        logging.info(f"Has in wallet {existing}")
+        if existing:
+            avg_price = (
+                (existing.avg_price * existing.amount)
+                + (asset.avg_price * asset.amount)
+            ) / (existing.amount + asset.amount)
+            asset.amount = asset.amount + existing.amount
+            asset.avg_price = avg_price
+            await db.update_asset_in_wallet(asset)
+        else:
+            await db.add_asset_to_wallet(asset)
         if asset.asset_type == AssetType.CRYPTO:
             self.wallet.crypto[asset.name] = asset
         else:
             self.wallet.stocks[asset.name] = asset
 
+    def _has_asset_in_wallet(self, asset: Asset) -> Asset | None:
+        if asset.asset_type == AssetType.CRYPTO:
+            if asset.name in self.wallet.crypto.keys():
+                return self.wallet.crypto[asset.name]
+        if asset.asset_type == AssetType.STOCK:
+            if asset.name in self.wallet.stocks.keys():
+                return self.wallet.stocks[asset.name]
+        return None
+
     async def update_asset(self, asset: Asset):
-        pass
+        await db.update_asset_in_wallet(asset)
+        if asset.asset_type == AssetType.CRYPTO:
+            self.wallet.crypto[asset.name] = asset
+        else:
+            self.wallet.stocks[asset.name] = asset
+
+    async def delete_asset(self, asset: Asset):
+        await db.delete_asset_from_wallet(asset)
+        if asset.asset_type == AssetType.CRYPTO:
+            self.wallet.crypto.pop(asset.name)
+        if asset.asset_type == AssetType.STOCK:
+            self.wallet.stocks.pop(asset.name)
