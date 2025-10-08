@@ -45,7 +45,9 @@ class PortfolioService:
             try:
                 price = float(meta["currentPrice"])
             except KeyError as e:
-                logging.error(f"Stock {stock} doesn't have current price")
+                logging.error(
+                    f"Stock {stock} doesn't have currentPrice, setting regularMarketPrice"
+                )
                 price = float(meta["regularMarketPrice"])
             change_24h = float(meta["regularMarketChange"])
             pl_today = self.wallet.stocks[stock].amount * change_24h
@@ -59,7 +61,6 @@ class PortfolioService:
             total_today += pl_today
             total_all += pl_total
             total_value += value
-        logging.info(f"Total Value {total_value}")
         return TotalStat(total_value, total_all, total_today, stats)
 
     async def get_crypto_info(self, assets: List[str]) -> Dict[str, Dict[str, Any]]:
