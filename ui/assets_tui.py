@@ -31,7 +31,7 @@ class AssetsTui(App):
     def on_mount(self):
         pass
         # self.query_one(PlotextPlot).display = False
-        # self.set_interval(15, self.refresh_chart)
+    # self.set_interval(15, self.refresh_chart)
 
     async def refresh_chart(self):
         logging.info("Started to wait")

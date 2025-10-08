@@ -46,7 +46,7 @@ class PortfolioService:
                 price = float(meta["currentPrice"])
             except KeyError as e:
                 logging.error(f"Stock {stock} doesn't have current price")
-                price = float(meta["bid"])
+                price = float(meta["regularMarketPrice"])
             change_24h = float(meta["regularMarketChange"])
             pl_today = self.wallet.stocks[stock].amount * change_24h
             pl_total = self.wallet.stocks[stock].amount * (

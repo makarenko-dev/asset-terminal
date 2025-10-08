@@ -11,7 +11,7 @@ from datetime import datetime
 
 from ui.pl_header import PLHeader
 from ui.edit_screen import EditAmountScreen
-from ui.delete import ConfirmDeleteScreen
+from ui.delete_screen import ConfirmDeleteScreen
 from ui import helper
 
 
